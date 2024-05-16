@@ -1,0 +1,11 @@
+csv
+math
+datetime
+ftplib
+gzip
+shutil
+georinex
+xarray
+unlzw3
+pandas==1.5.3
+numpy

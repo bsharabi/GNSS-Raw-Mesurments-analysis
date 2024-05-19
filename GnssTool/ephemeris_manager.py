@@ -5,17 +5,13 @@ import shutil
 import os
 from datetime import datetime, timezone
 import georinex
-import xarray
 import unlzw3
 import pandas as pd
 import numpy as np
-
-parent_directory = "".join(os.path.split(os.getcwd())[:-1])
-ephemeris_data_directory = os.path.join(parent_directory, 'data','output', 'ephemeris')
-
+from GnssTool import  *
 
 class EphemerisManager():
-    def __init__(self, data_directory=ephemeris_data_directory):
+    def __init__(self, data_directory):
         self.data_directory = data_directory
         nasa_dir = os.path.join(data_directory, 'nasa')
         igs_dir = os.path.join(data_directory, 'igs')

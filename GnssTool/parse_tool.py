@@ -3,7 +3,9 @@ import csv
 import math
 from datetime import datetime
 import os
-from config import *
+parent_directory = os.getcwd()
+inputs_directory = os.path.join(parent_directory,'data','inputs')
+outputs_directory= os.path.join(parent_directory,'data','outputs')
 
 class parser:
      
@@ -74,10 +76,10 @@ class parser:
                     writer.writerow([date_and_time, lat, lon, speed])
     
     @staticmethod
-    def parse_log_file(folder:str,filename:str)->None:
+    def parse_log_file(folder_name:str,folder_path:str,filename:str)->None:
         input_filename_noext = os.path.splitext(filename)[0]
-        print(os.path.join(inputs_directory,folder, filename))
-        with open(os.path.join(inputs_directory,folder, filename)) as csvfile:
+        
+        with open(os.path.join(folder_path, filename)) as csvfile:
             reader = csv.reader(csvfile)
             data = {'NMEA': []}
             for row in reader:
@@ -92,12 +94,11 @@ class parser:
 
         nmea_data = data.pop('NMEA')
 
-        output_directory = os.path.join(outputs_directory,folder)
-        print(output_directory)
+        output_directory = os.path.join(outputs_directory,folder_name)
         if not os.path.exists(output_directory):
             os.mkdir(output_directory)
             
-        output_directory = os.path.join(outputs_directory,folder,input_filename_noext)
+        output_directory = os.path.join(outputs_directory,folder_name,input_filename_noext)
         if not os.path.exists(output_directory):
             os.mkdir(output_directory)
 

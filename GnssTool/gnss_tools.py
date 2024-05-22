@@ -223,11 +223,9 @@ class gnssTool:
 
 
         for name, group in grouped:
-            # Collect the 'Sat.X', 'Sat.Y', 'Sat.Z' columns into a list of lists
             sat_coords = group[['Sat.X', 'Sat.Y', 'Sat.Z']].values.tolist()
             xs=np.array(sat_coords)
               
-            # Collect the 'Pseudo-Range' column into a list
             pseudo_ranges = group['Pseudo-Range'].tolist()
             pr=np.array(pseudo_ranges)
 
@@ -238,15 +236,52 @@ class gnssTool:
         ecef_array = np.stack(self.ecef_list, axis=0)
         lla_array = np.stack(navpy.ecef2lla(ecef_array), axis=1)
 
-        # Extract the first position as a reference for the NED transformation
         ref_lla = lla_array[0, :]
         ned_array = navpy.ecef2ned(ecef_array, ref_lla[0], ref_lla[1], ref_lla[2])
 
-        # Convert back to Pandas and save to csv
         self.lla_df = pd.DataFrame(lla_array, columns=['Latitude', 'Longitude', 'Altitude'])
         ned_df = pd.DataFrame(ned_array, columns=['N', 'E', 'D'])
         self.lla_df.to_csv(os.path.join(csv_parsed,'csv_parsed_output_LLA.csv'), index=False)
-    
+        
+    def calculate_LLA1(self, csv_parsed):
+        df = pd.read_csv(os.path.join(csv_parsed, 'gnss_parsed_output.csv'))
+        b = 0
+        x = np.array([0, 0, 0])
+        grouped = df.groupby('GPS time')
+
+        for name, group in grouped:
+            sat_coords = group[['Sat.X', 'Sat.Y', 'Sat.Z']].values.tolist()
+            xs = np.array(sat_coords)
+
+            pseudo_ranges = group['Pseudo-Range'].tolist()
+            pr = np.array(pseudo_ranges)
+
+            x, b, dp = self.__least_squares(xs, pr, x, b)
+
+            self.ecef_list.append(x)
+
+        ecef_array = np.stack(self.ecef_list, axis=0)
+        lla_array = np.stack(navpy.ecef2lla(ecef_array), axis=1)
+
+        # Create a DataFrame for latitude, longitude, and altitude
+        lla_df = pd.DataFrame(lla_array, columns=['Latitude', 'Longitude', 'Altitude'])
+
+        # Repeat the satellite coordinates DataFrame to match the length of the LLA DataFrame
+        repeated_sat_coords = df[['Sat.X', 'Sat.Y', 'Sat.Z']].iloc[:len(lla_df)].reset_index(drop=True)
+
+        # Convert lla_array and repeated_sat_coords to numpy arrays
+        lla_array = np.array(lla_df)
+        sat_coords_array = np.array(repeated_sat_coords)
+
+        # Create a combined array
+        combined_array = np.hstack((lla_array, sat_coords_array))
+
+        # Convert combined array to DataFrame
+        result_df = pd.DataFrame(combined_array, columns=['Latitude', 'Longitude', 'Altitude', 'Sat.X', 'Sat.Y', 'Sat.Z'])
+
+        # Save the result to CSV
+        result_df.to_csv(os.path.join(csv_parsed, 'csv_parsed_output_LLA.csv'), index=False)
+        
     def create_kml(self,folder):
         # # Create KML file
         kml = simplekml.Kml()
@@ -256,24 +291,4 @@ class gnssTool:
 
         kml.save(os.path.join(folder,'computed_path.kml'))
                    
-
-
-# Perform coordinate transformations using the Navpy library
-
-
-
-
-
-
-# # Add computed positions to the output_data
-# output_data['Sat.X'] = ecef_array[:, 0]
-# output_data['Sat.Y'] = ecef_array[:, 1]
-# output_data['Sat.Z'] = ecef_array[:, 2]
-# output_data['Lat'] = lla_array[:, 0]
-# output_data['Lon'] = lla_array[:, 1]
-# output_data['Alt'] = lla_array[:, 2]
-
-# # Output to CSV
-# output_data.to_csv(kml_parsed_output_filepath, index=False)
-# print(f"Final output saved to {kml_parsed_output_filepath}")
 

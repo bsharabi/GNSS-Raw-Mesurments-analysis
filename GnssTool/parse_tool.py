@@ -3,33 +3,43 @@ import csv
 import math
 from datetime import datetime
 import os
+
 parent_directory = os.getcwd()
-inputs_directory = os.path.join(parent_directory,'data','inputs')
-outputs_directory= os.path.join(parent_directory,'data','outputs')
+inputs_directory = os.path.join(parent_directory, 'data', 'inputs')
+outputs_directory = os.path.join(parent_directory, 'data', 'outputs')
+
 
 class parser:
-     
+    """
+    A class to parse NMEA data and log files.
+
+    Attributes:
+        None
+    """
+
     @staticmethod
-    def nmea_to_csv(nmea_data, filename) ->None:
+    def nmea_to_csv(nmea_data: list, filename: str) -> None:
+        """
+        Converts NMEA data to CSV format and writes it to a file.
 
-        # open the output file in write mode
+        Args:
+            nmea_data (list): The NMEA data to convert.
+            filename (str): The name of the output CSV file.
+
+        Returns:
+            None
+        """
+        # Open the output file in write mode
         with open(filename, 'wt') as output_file:
-
-            # create a csv reader object from the input file (nmea files are basically csv)
-
-            # create a csv writer object for the output file
+            # Create a csv writer object for the output file
             writer = csv.writer(output_file, delimiter=',', lineterminator='\n')
-
-            # write the header line to the csv file
+            # Write the header line to the csv file
             writer.writerow(['date_and_time', 'lat', 'lon', 'speed'])
-
-            # iterate over all the rows in the nmea file
+            # Iterate over all the rows in the NMEA data
             for row in nmea_data:
-
-                # skip all lines that do not start with $GPRMC
+                # Skip all lines that do not start with $GPRMC
                 if row[0].startswith('$GNRMC'):
-                    # for each row, fetch the values from the row's columns
-                    # columns that are not used contain technical GPS stuff that you are probably not interested in
+                    # Fetch the values from the row's columns
                     time = row[1]
                     warning = row[2]
                     lat = row[3]
@@ -38,47 +48,38 @@ class parser:
                     lon_direction = row[6]
                     speed = row[7]
                     date = row[9]
-
-                    # if the "warning" value is "V" (void), you may want to skip it since this is an indicator for an incomplete data row)
+                    # Skip rows with warning 'V'
                     if warning == 'V':
                         continue
-
-                    # merge the time and date columns into one Python datetime object (usually more convenient than having both separately)
-                    date_and_time = datetime.strptime(
-                        date + ' ' + time, '%d%m%y %H%M%S.%f')
-
-                    # convert the Python datetime into your preferred string format, see http://www.tutorialspoint.com/python/time_strftime.htm for futher possibilities
-                    # [:-3] cuts off the last three characters (trailing zeros from the fractional seconds)
-                    date_and_time = date_and_time.strftime(
-                        '%y-%m-%d %H:%M:%S.%f')[:-3]
-
-                    # lat and lon values in the $GPRMC nmea sentences come in an rather uncommon format. for convenience, convert them into the commonly used decimal degree format which most applications can read.
-                    # the "high level" formula for conversion is: DDMM.MMMMM => DD + (YY.ZZZZ / 60), multiplicated with (-1) if direction is either South or West
-                    # the following reflects this formula in mathematical terms.
-                    # lat and lon have to be converted from string to float in order to do calculations with them.
-                    # you probably want the values rounded to 6 digits after the point for better readability.
-                    lat = round(math.floor(float(lat) / 100) +
-                                (float(lat) % 100) / 60, 6)
+                    # Merge the time and date columns into one Python datetime object
+                    date_and_time = datetime.strptime(date + ' ' + time, '%d%m%y %H%M%S.%f')
+                    date_and_time = date_and_time.strftime('%y-%m-%d %H:%M:%S.%f')[:-3]
+                    # Convert lat and lon values to decimal degree format
+                    lat = round(math.floor(float(lat) / 100) + (float(lat) % 100) / 60, 6)
                     if lat_direction == 'S':
                         lat = lat * -1
-
-                    lon = round(math.floor(float(lon) / 100) +
-                                (float(lon) % 100) / 60, 6)
+                    lon = round(math.floor(float(lon) / 100) + (float(lon) % 100) / 60, 6)
                     if lon_direction == 'W':
                         lon = lon * -1
-
-                    # speed is given in knots, you'll probably rather want it in km/h and rounded to full integer values.
-                    # speed has to be converted from string to float first in order to do calculations with it.
-                    # conversion to int is to get rid of the tailing ".0".
+                    # Convert speed from knots to km/h
                     speed = float(speed) * 1.15078
-
-                    # write the calculated/formatted values of the row that we just read into the csv file
+                    # Write the calculated/formatted values to the csv file
                     writer.writerow([date_and_time, lat, lon, speed])
-    
+
     @staticmethod
-    def parse_log_file(folder_name:str,folder_path:str,filename:str)->None:
+    def parse_log_file(folder_name: str, folder_path: str, filename: str) -> None:
+        """
+        Parses a log file and saves the data into CSV files.
+
+        Args:
+            folder_name (str): Name of the folder to save parsed files.
+            folder_path (str): Path to the folder containing the log file.
+            filename (str): Name of the log file to parse.
+
+        Returns:
+            None
+        """
         input_filename_noext = os.path.splitext(filename)[0]
-        
         with open(os.path.join(folder_path, filename)) as csvfile:
             reader = csv.reader(csvfile)
             data = {'NMEA': []}
@@ -90,21 +91,14 @@ class parser:
                         data[row[0][2:]] = [row[1:]]
                 else:
                     data[row[0]].append(row[1:])
-
-
         nmea_data = data.pop('NMEA')
-
-        output_directory = os.path.join(outputs_directory,folder_name)
+        output_directory = os.path.join(outputs_directory, folder_name)
         if not os.path.exists(output_directory):
             os.mkdir(output_directory)
-            
-        output_directory = os.path.join(outputs_directory,folder_name,input_filename_noext)
+        output_directory = os.path.join(outputs_directory, folder_name, input_filename_noext)
         if not os.path.exists(output_directory):
             os.mkdir(output_directory)
-
         for key, values in data.items():
             data[key] = pd.DataFrame(values[1:], columns=values[0])
             data[key].to_csv(os.path.join(output_directory, key + '.csv'), index=False)
-
-        parser.nmea_to_csv(nmea_data, os.path.join(output_directory,'NMEA.csv'))
-        
+        parser.nmea_to_csv(nmea_data, os.path.join(output_directory, 'NMEA.csv'))

@@ -8,10 +8,25 @@ import georinex
 import unlzw3
 import pandas as pd
 import numpy as np
-from GnssTool import  *
+from GnssTool import *
 
-class EphemerisManager():
-    def __init__(self, data_directory):
+class EphemerisManager:
+    """
+    Manages ephemeris data for GNSS (Global Navigation Satellite System).
+
+    Attributes:
+        data_directory (str): The directory where data is stored.
+        data (pd.DataFrame or None): DataFrame holding ephemeris data.
+        leapseconds (int or None): Number of leap seconds.
+    """
+
+    def __init__(self, data_directory: str):
+        """
+        Initializes the EphemerisManager with the specified data directory.
+
+        Args:
+            data_directory (str): The directory where data will be stored.
+        """
         self.data_directory = data_directory
         nasa_dir = os.path.join(data_directory, 'nasa')
         igs_dir = os.path.join(data_directory, 'igs')
@@ -20,7 +35,17 @@ class EphemerisManager():
         self.data = None
         self.leapseconds = None
 
-    def get_ephemeris(self, timestamp, satellites):
+    def get_ephemeris(self, timestamp: datetime, satellites: list) -> pd.DataFrame:
+        """
+        Retrieves ephemeris data for the specified timestamp and satellites.
+
+        Args:
+            timestamp (datetime): The timestamp for which to retrieve data.
+            satellites (list): List of satellites.
+
+        Returns:
+            pd.DataFrame: DataFrame containing ephemeris data.
+        """
         systems = EphemerisManager.get_constellations(satellites)
         if not isinstance(self.data, pd.DataFrame):
             self.load_data(timestamp, systems)
@@ -28,19 +53,34 @@ class EphemerisManager():
         if satellites:
             data = data.loc[data['sv'].isin(satellites)]
         data = data.loc[data['time'] < timestamp]
-        data = data.sort_values('time').groupby(
-            'sv').last().drop('index', 'columns')
+        data = data.sort_values('time').groupby('sv').last().drop('index', 'columns')
         data['Leap Seconds'] = self.leapseconds
         return data
 
-    def get_leapseconds(self, timestamp):
+    def get_leapseconds(self, timestamp: datetime) -> int:
+        """
+        Retrieves the number of leap seconds.
+
+        Args:
+            timestamp (datetime): The timestamp for which to retrieve leap seconds.
+
+        Returns:
+            int: Number of leap seconds.
+        """
         return self.leapseconds
 
-    def load_data(self, timestamp, constellations=None):
+    def load_data(self, timestamp: datetime, constellations: set = None):
+        """
+        Loads ephemeris data for the specified timestamp and constellations.
+
+        Args:
+            timestamp (datetime): The timestamp for which to load data.
+            constellations (set, optional): Set of satellite constellations. Defaults to None.
+        """
         filepaths = EphemerisManager.get_filepaths(timestamp)
         data_list = []
         timestamp_age = datetime.now(timezone.utc) - timestamp
-        if constellations == None:
+        if constellations is None:
             for fileinfo in filepaths.values():
                 data = self.get_ephemeris_dataframe(fileinfo)
                 data_list.append(data)
@@ -49,20 +89,15 @@ class EphemerisManager():
             legacy_systems_only = len(constellations - legacy_systems) == 0
             if timestamp_age.days > 0:
                 if legacy_systems_only:
-                    data_list.append(self.get_ephemeris_dataframe(
-                        filepaths['nasa_daily_gps']))
+                    data_list.append(self.get_ephemeris_dataframe(filepaths['nasa_daily_gps']))
                     if 'R' in constellations:
-                        data_list.append(self.get_ephemeris_dataframe(
-                            filepaths['nasa_daily_glonass']))
+                        data_list.append(self.get_ephemeris_dataframe(filepaths['nasa_daily_glonass']))
                 else:
-                    data_list.append(self.get_ephemeris_dataframe(
-                        filepaths['nasa_daily_combined']))
+                    data_list.append(self.get_ephemeris_dataframe(filepaths['nasa_daily_combined']))
             else:
-                data_list.append(self.get_ephemeris_dataframe(
-                    filepaths['nasa_daily_gps']))
+                data_list.append(self.get_ephemeris_dataframe(filepaths['nasa_daily_gps']))
                 if not legacy_systems_only:
-                    data_list.append(self.get_ephemeris_dataframe(
-                        filepaths['bkg_daily_combined']))
+                    data_list.append(self.get_ephemeris_dataframe(filepaths['bkg_daily_combined']))
 
         data = pd.DataFrame()
         data = data.append(data_list, ignore_index=True)
@@ -70,7 +105,17 @@ class EphemerisManager():
         data.sort_values('time', inplace=True, ignore_index=True)
         self.data = data
 
-    def get_ephemeris_dataframe(self, fileinfo, constellations=None):
+    def get_ephemeris_dataframe(self, fileinfo: dict, constellations: set = None) -> pd.DataFrame:
+        """
+        Retrieves and processes ephemeris data from a file.
+
+        Args:
+            fileinfo (dict): Dictionary containing file information (filepath and URL).
+            constellations (set, optional): Set of satellite constellations. Defaults to None.
+
+        Returns:
+            pd.DataFrame: DataFrame containing ephemeris data.
+        """
         filepath = fileinfo['filepath']
         url = fileinfo['url']
         directory = os.path.split(filepath)[0]
@@ -86,18 +131,15 @@ class EphemerisManager():
             else:
                 secure = False
             try:
-                self.retrieve_file(url, directory, filename,
-                                   dest_filepath, secure)
+                self.retrieve_file(url, directory, filename, dest_filepath, secure)
                 self.decompress_file(dest_filepath)
             except ftplib.error_perm as err:
                 print('ftp error')
                 return pd.DataFrame()
         if not self.leapseconds:
-            self.leapseconds = EphemerisManager.load_leapseconds(
-                decompressed_filename)
+            self.leapseconds = EphemerisManager.load_leapseconds(decompressed_filename)
         if constellations:
-            data = georinex.load(decompressed_filename,
-                                 use=constellations).to_dataframe()
+            data = georinex.load(decompressed_filename, use=constellations).to_dataframe()
         else:
             data = georinex.load(decompressed_filename).to_dataframe()
         data.dropna(how='all', inplace=True)
@@ -112,8 +154,16 @@ class EphemerisManager():
         return data
 
     @staticmethod
-    def get_filetype(timestamp):
-        # IGS switched from .Z to .gz compression format on December 1st, 2020
+    def get_filetype(timestamp: datetime) -> str:
+        """
+        Determines the file extension based on the timestamp.
+
+        Args:
+            timestamp (datetime): The timestamp for which to determine the file extension.
+
+        Returns:
+            str: The file extension (either '.gz' or '.Z').
+        """
         if timestamp >= datetime(2020, 12, 1, 0, 0, 0, tzinfo=timezone.utc):
             extension = '.gz'
         else:
@@ -121,7 +171,16 @@ class EphemerisManager():
         return extension
 
     @staticmethod
-    def load_leapseconds(filename):
+    def load_leapseconds(filename: str) -> int:
+        """
+        Loads the number of leap seconds from a file.
+
+        Args:
+            filename (str): The filename to load the leap seconds from.
+
+        Returns:
+            int: The number of leap seconds.
+        """
         with open(filename) as f:
             for line in f:
                 if 'LEAP SECONDS' in line:
@@ -130,8 +189,17 @@ class EphemerisManager():
                     return None
 
     @staticmethod
-    def get_constellations(satellites):
-        if type(satellites) is list:
+    def get_constellations(satellites: list) -> set:
+        """
+        Determines the constellations from a list of satellites.
+
+        Args:
+            satellites (list): List of satellites.
+
+        Returns:
+            set: Set of constellations.
+        """
+        if isinstance(satellites, list):
             systems = set()
             for sat in satellites:
                 systems.add(sat[0])
@@ -140,24 +208,45 @@ class EphemerisManager():
             return None
 
     @staticmethod
-    def calculate_toc(timestamp):
+    def calculate_toc(timestamp: datetime):
+        """
+        Placeholder for TOC calculation method.
+
+        Args:
+            timestamp (datetime): The timestamp for which to calculate TOC.
+        """
         pass
 
-    def retrieve_file(self, url, directory, filename, dest_filepath, secure=False):
+    def retrieve_file(self, url: str, directory: str, filename: str, dest_filepath: str, secure: bool = False):
+        """
+        Retrieves a file from an FTP server.
+
+        Args:
+            url (str): The URL of the FTP server.
+            directory (str): The directory on the server.
+            filename (str): The name of the file to retrieve.
+            dest_filepath (str): The destination filepath.
+            secure (bool, optional): Whether to use secure FTP. Defaults to False.
+        """
         print('Retrieving ' + directory + '/' + filename + ' from ' + url)
         ftp = self.connect(url, secure)
         src_filepath = directory + '/' + filename
         try:
             with open(dest_filepath, 'wb') as handle:
-                ftp.retrbinary(
-                    'RETR ' + src_filepath, handle.write)
+                ftp.retrbinary('RETR ' + src_filepath, handle.write)
         except ftplib.error_perm as err:
             print('Failed to retrieve ' + src_filepath + ' from ' + url)
             print(err)
             os.remove(dest_filepath)
             raise ftplib.error_perm
 
-    def decompress_file(self, filepath):
+    def decompress_file(self, filepath: str):
+        """
+        Decompresses a file.
+
+        Args:
+            filepath (str): The path to the file to decompress.
+        """
         extension = os.path.splitext(filepath)[1]
         decompressed_path = os.path.splitext(filepath)[0]
         if extension == '.gz':
@@ -170,7 +259,17 @@ class EphemerisManager():
                     f_out.write(unlzw3.unlzw(f_in.read()))
         os.remove(filepath)
 
-    def connect(self, url, secure):
+    def connect(self, url: str, secure: bool) -> FTP:
+        """
+        Connects to an FTP server.
+
+        Args:
+            url (str): The URL of the FTP server.
+            secure (bool): Whether to use secure FTP.
+
+        Returns:
+            FTP: The FTP connection object.
+        """
         if secure:
             ftp = FTP_TLS(url)
             ftp.login()
@@ -180,14 +279,31 @@ class EphemerisManager():
             ftp.login()
         return ftp
 
-    def listdir(self, url, directory, secure):
+    def listdir(self, url: str, directory: str, secure: bool):
+        """
+        Lists the contents of a directory on an FTP server.
+
+        Args:
+            url (str): The URL of the FTP server.
+            directory (str): The directory to list.
+            secure (bool): Whether to use secure FTP.
+        """
         ftp = self.connect(url, secure)
         dirlist = ftp.nlst(directory)
         dirlist = [x for x in dirlist]
         print(dirlist)
 
     @staticmethod
-    def get_filepaths(timestamp):
+    def get_filepaths(timestamp: datetime) -> dict:
+        """
+        Gets the file paths for the ephemeris data based on the timestamp.
+
+        Args:
+            timestamp (datetime): The timestamp for which to get file paths.
+
+        Returns:
+            dict: Dictionary containing file paths and URLs.
+        """
         timetuple = timestamp.timetuple()
         extension = EphemerisManager.get_filetype(timestamp)
         filepaths = {}
@@ -219,5 +335,3 @@ class EphemerisManager():
             'filepath': directory + filename, 'url': 'igs.bkg.bund.de'}
 
         return filepaths
-
-
